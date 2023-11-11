@@ -30,18 +30,17 @@ def get_api_credentials(fn=None):
         raise ValueError("You have not configured your Nomic API token. Run `nomic login` to configure.")
 
     with open(filepath, 'r') as file:
-        credentials = json.load(file)
-        return credentials
+        return json.load(file)
 
 
 def login(token, tenant='production'):
     environment = tenants[tenant]
-    auth0_auth_endpoint = f"https://{environment['frontend_domain']}/cli-login"
-
     console = Console()
-    style = "bold"
     if not token:
+        style = "bold"
         console.print("Authenticate with the Nomic API", style=style, justify="center")
+        auth0_auth_endpoint = f"https://{environment['frontend_domain']}/cli-login"
+
         console.print(auth0_auth_endpoint, style=style, justify="center")
         console.print(
             "Click the above link to retrieve your access token and then run `nomic login \[token]`",
@@ -57,7 +56,7 @@ def login(token, tenant='production'):
     response = requests.get('https://' + environment['api_domain'] + f"/v1/user/token/refresh/{token}")
     response = validate_api_http_response(response)
 
-    if not response.status_code == 200:
+    if response.status_code != 200:
         raise Exception("Could not authorize you with Nomic. Run `nomic login` to re-authenticate.")
 
     bearer_token = response.json()['access_token']
@@ -76,7 +75,7 @@ def refresh_bearer_token():
         )
         response = validate_api_http_response(response)
 
-        if not response.status_code == 200:
+        if response.status_code != 200:
             raise Exception("Could not authorize you with Nomic. Run `nomic login` to re-authenticate.")
 
         bearer_token = response.json()['access_token']
@@ -95,16 +94,15 @@ def switch(tenant):
         return
     if current_tenant == tenant:
         return
+    current_loc = nomic_base_path / 'credentials'
+    new_loc = nomic_base_path / f'credentials_{current_tenant}'
+    print(f'Switching from {current_tenant} to {tenant}.')
+    if current_loc.exists():
+        current_loc.rename(new_loc)
+    if (nomic_base_path / f'credentials_{tenant}').exists():
+        (nomic_base_path / f'credentials_{tenant}').rename(current_loc)
     else:
-        current_loc = nomic_base_path / 'credentials'
-        new_loc = nomic_base_path / f'credentials_{current_tenant}'
-        print(f'Switching from {current_tenant} to {tenant}.')
-        if current_loc.exists():
-            current_loc.rename(new_loc)
-        if (nomic_base_path / f'credentials_{tenant}').exists():
-            (nomic_base_path / f'credentials_{tenant}').rename(current_loc)
-        else:
-            login(token=None, tenant=tenant)
+        login(token=None, tenant=tenant)
 
 
 @click.command()

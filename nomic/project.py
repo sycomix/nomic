@@ -75,7 +75,7 @@ class AtlasClass(object):
                 headers=self.header,
             )
             response = validate_api_http_response(response)
-            if not response.status_code == 200:
+            if response.status_code != 200:
                 logger.warning(str(response))
                 logger.info("Your authorization token is no longer valid.")
         else:
@@ -97,7 +97,7 @@ class AtlasClass(object):
             headers=self.header,
         )
         response = validate_api_http_response(response)
-        if not response.status_code == 200:
+        if response.status_code != 200:
             raise ValueError("Your authorization token is no longer valid. Run `nomic login` to obtain a new one.")
 
         return response.json()
@@ -191,16 +191,15 @@ class AtlasClass(object):
 
         '''
         if not isinstance(data, pa.Table):
-            raise Exception("Invalid data type for upload: {}".format(type(data)))
+            raise Exception(f"Invalid data type for upload: {type(data)}")
 
-        if project.meta['modality'] == 'text':
-            if "_embeddings" in data:
+        if "_embeddings" in data:
+            if project.meta['modality'] == 'text':
                 msg = "Can't add embeddings to a text project."
                 raise ValueError(msg)
         if project.meta['modality'] == 'embedding':
             if "_embeddings" not in data.column_names:
-                msg = "Must include embeddings in embedding project upload."
-                raise ValueError(msg)
+                raise ValueError("Must include embeddings in embedding project upload.")
 
         if project.id_field not in data.column_names:
             raise ValueError(f'Data must contain the ID column `{project.id_field}`')
@@ -211,7 +210,7 @@ class AtlasClass(object):
                 raise ValueError(f'Two different fields have the same lowercased name, `{col}`'
                 ': you must use unique column names.')
             seen.add(col.lower())
-            
+
         if project.schema is None:
             project._schema = convert_pyarrow_schema_for_atlas(data.schema)
         # Reformat to match the schema of the project.
@@ -244,7 +243,7 @@ class AtlasClass(object):
                     assert pa.types.is_boolean(mask.type)
                     reformatted[field.name] = pc.replace_with_mask(reformatted[field.name], mask, "null")
         for field in data.schema:
-            if not field.name in reformatted:
+            if field.name not in reformatted:
                 if field.name == "_embeddings":
                     reformatted['_embeddings'] = data['_embeddings']
                 else:
@@ -255,7 +254,9 @@ class AtlasClass(object):
             raise Exception("Project is currently indexing and cannot ingest new datums. Try again later.")
 
         # The following two conditions should never occur given the above, but just in case...
-        assert project.id_field in data.column_names, f"Upload does not contain your specified id_field"
+        assert (
+            project.id_field in data.column_names
+        ), "Upload does not contain your specified id_field"
 
         if not pa.types.is_string(data[project.id_field].type):
             logger.warning(f"id_field is not a string. Converting to string from {data[project.id_field].type}")
@@ -291,13 +292,12 @@ class AtlasClass(object):
         '''
 
         if organization_name is None:
-            if organization_id is None:  # default to current users organization (the one with their name)
-                organization = self._get_current_users_main_organization()
-                organization_name = organization['nickname']
-                organization_id = organization['organization_id']
-            else:
+            if organization_id is not None:
                 raise NotImplementedError("Getting organization by a specific ID is not yet implemented.")
 
+            organization = self._get_current_users_main_organization()
+            organization_name = organization['nickname']
+            organization_id = organization['organization_id']
         else:
             organization_id_request = requests.get(
                 self.atlas_api_path + f"/v1/organization/search/{organization_name}", headers=self.header
@@ -334,9 +334,7 @@ class AtlasClass(object):
 
         if response.status_code != 200:
             raise Exception(f"Failed to find project: {response.text}")
-        search_results = response.json()['results']
-
-        if search_results:
+        if search_results := response.json()['results']:
             existing_project = search_results[0]
             existing_project_id = existing_project['id']
             return {
@@ -407,8 +405,7 @@ class AtlasProjection:
         if response.status_code != 200:
             raise Exception(response.text)
 
-        content = response.json()
-        return content
+        return response.json()
 
     def __str__(self):
         return f"{self.name}: {self.map_link}"
@@ -535,7 +532,9 @@ class AtlasProjection:
         tbs = []
         root = feather.read_table(self.tile_destination / "0/0/0.feather", memory_map=True)
         try:
-            sidecars = set([v for k, v in json.loads(root.schema.metadata[b'sidecars']).items()])
+            sidecars = {
+                v for k, v in json.loads(root.schema.metadata[b'sidecars']).items()
+            }
         except KeyError:
             sidecars = set([])
         for path in self._tiles_in_order():
@@ -561,10 +560,11 @@ class AtlasProjection:
                     (z + 1, x * 2 + 1, y * 2),
                     (z + 1, x * 2, y * 2 + 1),
                     (z + 1, x * 2 + 1, y * 2 + 1)]
+
         # start with the root
         paths = [(0, 0, 0)]
         # Pop off the front, extend the back (breadth first traversal)
-        while len(paths) > 0:
+        while paths:
             z, x, y = paths.pop(0)
             path = Path(self.tile_destination, str(z), str(x), str(y)).with_suffix(".feather")
             if path.exists():
@@ -590,10 +590,10 @@ class AtlasProjection:
 
         self.tile_destination.mkdir(parents=True, exist_ok=True)
         root = f'{self.project.atlas_api_path}/v1/project/{self.project.id}/index/projection/{self.id}/quadtree/'
-        quads = [f'0/0/0']
+        quads = ['0/0/0']
         all_quads = []
         sidecars = None
-        while len(quads) > 0:
+        while quads:
             rawquad = quads.pop(0)
             quad = rawquad + ".feather"
             all_quads.append(quad)
@@ -606,15 +606,14 @@ class AtlasProjection:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 feather.write_feather(tb, path)
             schema = ipc.open_file(path).schema
-            if sidecars is None and b'sidecars' in schema.metadata:
-                # Grab just the filenames
-                sidecars = set([v for k, v in json.loads(schema.metadata.get(b'sidecars')).items()])
-            elif sidecars is None:
-                sidecars = set()
-            if not "." in rawquad:
-                for sidecar in sidecars:
-                    # The sidecar loses the feather suffix because it's supposed to be raw.
-                    quads.append(quad.replace(".feather", f'.{sidecar}'))
+            if sidecars is None:
+                if b'sidecars' in schema.metadata:
+                                # Grab just the filenames
+                    sidecars = {v for k, v in json.loads(schema.metadata.get(b'sidecars')).items()}
+                else:
+                    sidecars = set()
+            if "." not in rawquad:
+                quads.extend(quad.replace(".feather", f'.{sidecar}') for sidecar in sidecars)
             if not schema.metadata or b'children' not in schema.metadata:
                 # Sidecars don't have children.
                 continue
@@ -784,9 +783,7 @@ class AtlasProject(AtlasClass):
 
         supported_modalities = ['text', 'embedding']
         if modality not in supported_modalities:
-            msg = 'Tried to create project with modality: {}, but Atlas only supports: {}'.format(
-                modality, supported_modalities
-            )
+            msg = f'Tried to create project with modality: {modality}, but Atlas only supports: {supported_modalities}'
             raise ValueError(msg)
 
         if unique_id_field is None:
@@ -844,8 +841,7 @@ class AtlasProject(AtlasClass):
     def projections(self) -> List[AtlasProjection]:
         output = []
         for index in self.indices:
-            for projection in index.projections:
-                output.append(projection)
+            output.extend(iter(index.projections))
         return output
 
     @property
@@ -1008,12 +1004,11 @@ class AtlasProject(AtlasClass):
 
         self._latest_project_state()
 
-        # for large projects, alter the default projection configurations.
-        if self.total_datums >= 1_000_000:
-            if (
+        if (
                 projection_epochs == DEFAULT_PROJECTION_EPOCHS
                 and projection_n_neighbors == DEFAULT_PROJECTION_N_NEIGHBORS
             ):
+            if self.total_datums >= 1_000_000:
                 projection_n_neighbors = DEFAULT_LARGE_PROJECTION_N_NEIGHBORS
                 projection_epochs = DEFAULT_LARGE_PROJECTION_EPOCHS
 
@@ -1046,8 +1041,8 @@ class AtlasProject(AtlasClass):
         elif self.modality == 'text':
             # find the index id of the index with name reuse_embeddings_from_index
             reuse_embedding_from_index_id = None
-            indices = self.indices
             if reuse_embeddings_from_index is not None:
+                indices = self.indices
                 for index in indices:
                     if index.name == reuse_embeddings_from_index:
                         reuse_embedding_from_index_id = index.id
@@ -1063,10 +1058,7 @@ class AtlasProject(AtlasClass):
             if indexed_field not in self.project_fields:
                 raise Exception(f"Indexing on {indexed_field} not allowed. Valid options are: {self.project_fields}")
 
-            model = 'NomicEmbed'
-            if multilingual:
-                model = 'NomicEmbedMultilingual'
-
+            model = 'NomicEmbedMultilingual' if multilingual else 'NomicEmbed'
             build_template = {
                 'project_id': self.id,
                 'index_name': name,
@@ -1106,8 +1098,8 @@ class AtlasProject(AtlasClass):
             json=build_template,
         )
         if response.status_code != 200:
-            logger.info('Create project failed with code: {}'.format(response.status_code))
-            logger.info('Additional info: {}'.format(response.text))
+            logger.info(f'Create project failed with code: {response.status_code}')
+            logger.info(f'Additional info: {response.text}')
             raise Exception(response.json()['detail'])
 
         job_id = response.json()['job_id']
@@ -1160,7 +1152,7 @@ class AtlasProject(AtlasClass):
                     complete_projections.append(projection)
                 html += f"""<li>{projection.name}. Status {state}. <a target="_blank" href="{projection.map_link}">view online</a></li>"""
             html += "</ul>"
-        if len(complete_projections) >= 1:
+        if complete_projections:
             # Display most recent complete projection.
             html += "<hr>"
             html += complete_projections[-1]._embed_html()
@@ -1192,7 +1184,7 @@ class AtlasProject(AtlasClass):
         )
 
         if response.status_code == 200:
-            return [item for item in response.json()['datums']]
+            return list(response.json()['datums'])
         else:
             raise Exception(response.text)
 
@@ -1284,7 +1276,7 @@ class AtlasProject(AtlasClass):
 
         # Add embeddings to the data.
         # Allow 2d embeddings to stay at single-fp precision.
-        if not (embeddings.shape[1] == 2 and embeddings.dtype == np.float32):
+        if embeddings.shape[1] != 2 or embeddings.dtype != np.float32:
             embeddings = embeddings.astype(np.float16)
         # Fail if any embeddings are NaN or Inf.
         assert not np.isnan(embeddings).any(), "Embeddings must not contain NaN values."
@@ -1355,7 +1347,7 @@ class AtlasProject(AtlasClass):
         close_pbar = False
         if pbar is None:
             close_pbar = True
-            pbar = tqdm(total=int(len(data)) // shard_size)
+            pbar = tqdm(total=len(data) // shard_size)
         failed = 0
         succeeded = 0
         errors_504 = 0

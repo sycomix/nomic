@@ -12,8 +12,7 @@ def arrow_iterator(table: pa.Table):
     # Wrote this as a generator so we don't realize the whole table in memory
     reader = table.to_reader(max_chunksize=10_000)
     for batch in reader:
-        for item in batch.to_pylist():
-            yield item
+        yield from batch.to_pylist()
     
 
 def b64int(i: int):
