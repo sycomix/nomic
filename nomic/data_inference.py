@@ -4,8 +4,7 @@ import pyarrow as pa
 
 
 def from_list(values: Dict[str, Any], schema=None) -> pa.Table:
-    tb = pa.Table.from_pylist(values, schema=schema)
-    return tb
+    return pa.Table.from_pylist(values, schema=schema)
 
 
 permitted_types = {
@@ -26,7 +25,7 @@ def convert_pyarrow_schema_for_atlas(schema: pa.Schema) -> pa.Schema:
     for field in schema:
         if field.name.startswith('_'):
             # Underscore fields are private to Atlas and will be handled with their own logic.
-            if not field.name in {"_embeddings"}:
+            if field.name not in {"_embeddings"}:
                 raise ValueError(f"Underscore fields are reserved for Atlas internal use: {field.name}")
             whitelist[field.name] = field.type
         elif pa.types.is_boolean(field.type):
@@ -51,4 +50,4 @@ def convert_pyarrow_schema_for_atlas(schema: pa.Schema) -> pa.Schema:
             raise TypeError(f"Unknown type: {field.name} {field.type}")
     usertypes = {k: permitted_types[v] for k, v in types.items()}
 
-    return pa.schema({**usertypes, **whitelist})
+    return pa.schema(usertypes | whitelist)

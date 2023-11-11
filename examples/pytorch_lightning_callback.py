@@ -29,8 +29,7 @@ class MNISTModel(LightningModule):
     def training_step(self, batch, batch_nb):
         x, y = batch
         logits = self(x)
-        loss = F.cross_entropy(logits, y)
-        return loss
+        return F.cross_entropy(logits, y)
 
     def validation_step(self, batch, batch_idx):
         x, y = batch

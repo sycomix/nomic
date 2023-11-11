@@ -232,11 +232,9 @@ def map_text(
         add_datums_if_exists=add_datums_if_exists,
     )
 
-    add_id_field = False
-
-    if id_field == ATLAS_DEFAULT_ID_FIELD and id_field not in first_sample:
-        add_id_field = True
-
+    add_id_field = (
+        id_field == ATLAS_DEFAULT_ID_FIELD and id_field not in first_sample
+    )
     if add_id_field:
         logger.warning("An ID field was not specified in your data so one was generated for you in insertion order.")
 
@@ -256,7 +254,7 @@ def map_text(
             first_sample = first_sample.copy()
             first_sample[id_field] = b64int(id_to_add)
             id_to_add += 1
-        
+
         batch = [first_sample]
 
         for d in data_iterator:
@@ -273,7 +271,7 @@ def map_text(
 
         if len(batch) > 0:
             project.add_text(batch)
-        
+
     except BaseException as e:
         if number_of_datums_before_upload == 0:
             logger.info(f"{project.name}: Deleting project due to failure in initial upload.")

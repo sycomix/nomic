@@ -202,9 +202,9 @@ class AtlasMapTopics:
             return self._metadata
 
         response = requests.get(
-            self.projection.project.atlas_api_path
-            + "/v1/project/{}/index/projection/{}".format(
-                self.projection.project.meta['id'], self.projection.projection_id
+            (
+                self.projection.project.atlas_api_path
+                + f"/v1/project/{self.projection.project.meta['id']}/index/projection/{self.projection.projection_id}"
             ),
             headers=self.projection.project.header,
         )
@@ -275,17 +275,18 @@ class AtlasMapTopics:
             if len(datum_ids) == 0:
                 continue
 
-            result_dict = {}
             topic_metadata = topic_df[topic_df["topic_short_description"] == topic]
 
             topic_label = topic_metadata["topic_short_description"].item()
             subtopics = []
             if (topic_label, topic_depth) in hierarchy:
                 subtopics = hierarchy[(topic_label, topic_depth)]
-            result_dict["subtopics"] = subtopics
-            result_dict["subtopic_ids"] = topic_df[topic_df["topic_short_description"].isin(subtopics)][
-                "topic_id"
-            ].tolist()
+            result_dict = {
+                "subtopics": subtopics,
+                "subtopic_ids": topic_df[
+                    topic_df["topic_short_description"].isin(subtopics)
+                ]["topic_id"].tolist(),
+            }
             result_dict["topic_id"] = topic_metadata["topic_id"].item()
             result_dict["topic_short_description"] = topic_label
             result_dict["topic_long_description"] = topic_metadata["topic_description"].item()
@@ -485,8 +486,9 @@ class AtlasMapEmbeddings:
             # Should there be more than 10, we need to sort by int values, not string values
             sortable = sorted(files, key=lambda x: int(x.with_suffix("").stem.split("-")[-1]))
             if len(sortable) == 0:
-                raise FileNotFoundError("Could not find any embeddings for tile {}".format(path) + 
-                " If you possibly downloaded only some of the embeddings, run '[map_name].download_latent()'.")
+                raise FileNotFoundError(
+                    f"Could not find any embeddings for tile {path} If you possibly downloaded only some of the embeddings, run '[map_name].download_latent()'."
+                )
             for file in sortable:
                 tb = feather.read_table(file, memory_map=True)
                 dims = tb['_embeddings'].type.list_size
@@ -608,27 +610,6 @@ class AtlasMapEmbeddings:
 
         raise DeprecationWarning("Deprecated as of June 2023. Iterate `map.embeddings.latent`.")
 
-        if self.project.is_locked:
-            raise Exception('Project is locked! Please wait until the project is unlocked to download embeddings')
-
-        offset = 0
-        limit = EMBEDDING_PAGINATION_LIMIT
-        while True:
-            response = requests.get(
-                self.atlas_api_path
-                + f"/v1/project/data/get/embedding/{self.project.id}/{self.projection.atlas_index_id}/{offset}/{limit}",
-                headers=self.header,
-            )
-            if response.status_code != 200:
-                raise Exception(response.text)
-
-            content = response.json()
-            if len(content['datum_ids']) == 0:
-                break
-            offset += len(content['datum_ids'])
-
-            yield content['datum_ids'], content['embeddings']
-
     def _download_embeddings(self, save_directory: str, num_workers: int = 10) -> bool:
         '''
         Deprecated in favor of `map.embeddings.latent`.
@@ -643,56 +624,6 @@ class AtlasMapEmbeddings:
 
         '''
         raise DeprecationWarning("Deprecated as of June 2023. Use `map.embeddings.latent`.")
-        self.project._latest_project_state()
-
-        total_datums = self.project.total_datums
-        if self.project.is_locked:
-            raise Exception('Project is locked! Please wait until the project is unlocked to download embeddings')
-
-        offset = 0
-        limit = EMBEDDING_PAGINATION_LIMIT
-
-        def download_shard(offset, check_access=False):
-            response = requests.get(
-                self.project.atlas_api_path
-                + f"/v1/project/data/get/embedding/{self.project.id}/{self.projection.atlas_index_id}/{offset}/{limit}",
-                headers=self.project.header,
-            )
-
-            if response.status_code != 200:
-                raise Exception(response.text)
-
-            if check_access:
-                return
-
-            shard_name = '{}_{}_{}.feather'.format(self.projection.atlas_index_id, offset, offset + limit)
-            shard_path = os.path.join(save_directory, shard_name)
-            try:
-                content = response.content
-                is_arrow_format = content[:6] == b"ARROW1" and content[-6:] == b"ARROW1"
-
-                if not is_arrow_format:
-                    raise Exception('Expected response to be in Arrow IPC format')
-
-                with open(shard_path, 'wb') as f:
-                    f.write(content)
-
-            except Exception as e:
-                logger.error('Shard {} download failed with error: {}'.format(shard_name, e))
-
-        download_shard(0, check_access=True)
-
-        with tqdm(total=total_datums // limit) as pbar:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {
-                    executor.submit(download_shard, cur_offset): cur_offset
-                    for cur_offset in range(0, total_datums, limit)
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    _ = future.result()
-                    pbar.update(1)
-
-        return True
 
     def __repr__(self) -> str:
         return str(self.df)
@@ -918,9 +849,9 @@ class AtlasMapData:
         tbs = []
         root = feather.read_table(self.projection.tile_destination / Path("0/0/0.feather"))
         try:
-            small_sidecars = set(
-                [v for k, v in json.loads(root.schema.metadata[b"sidecars"]).items()]
-            )
+            small_sidecars = {
+                v for k, v in json.loads(root.schema.metadata[b"sidecars"]).items()
+            }
         except KeyError:
             small_sidecars = set([])
         for path in self.projection._tiles_in_order():
@@ -974,12 +905,12 @@ class AtlasMapData:
                 encoded_colname = base64.urlsafe_b64encode(
                     sidecar.encode("utf-8")
                 ).decode("utf-8")
-                filename = quad_str + "." + encoded_colname + ".feather"
+                filename = f"{quad_str}." + encoded_colname + ".feather"
                 path = self.projection.tile_destination / Path(filename)
 
                 # WARNING: Potentially large data request here
                 self._download_file(root + filename, path)
-        
+
         return sidecars
     
     def _download_file(self, url: str, path: str):

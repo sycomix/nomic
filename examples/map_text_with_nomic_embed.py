@@ -17,7 +17,7 @@ documents = [dataset[i] for i in subset_idxs]
 usages = []
 
 def print_total_tokens(usages):
-    return sum([usage['total_tokens'] for usage in usages])
+    return sum(usage['total_tokens'] for usage in usages)
 
 def generate_embeddings(documents):
     batch_size = 256
@@ -29,14 +29,12 @@ def generate_embeddings(documents):
         if (idx + 1) % batch_size == 0 or idx == len(documents):
             batch_embeddings = embed.text(texts=batch, model='nomic-embed-text-v1')
             usages.append(batch_embeddings['usage'])
-            for item in batch_embeddings['embeddings']:
-                document_embeddings.append(item)
+            document_embeddings.extend(iter(batch_embeddings['embeddings']))
             print(usages[-1], print_total_tokens(usages))
 
             batch = []
 
-    document_embeddings = np.array(document_embeddings)
-    return document_embeddings
+    return np.array(document_embeddings)
 
 document_embeddings = generate_embeddings(documents)
 

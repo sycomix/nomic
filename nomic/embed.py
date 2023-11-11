@@ -26,7 +26,7 @@ def text(texts: List[str], model: str = 'nomic-embed-text-v1'):
     """
 
     response = requests.post(
-        atlas_class.atlas_api_path + "/v1/embedding/text",
+        f"{atlas_class.atlas_api_path}/v1/embedding/text",
         headers=atlas_class.header,
         json={'texts': texts, 'model': model},
     )
@@ -52,17 +52,17 @@ def images(images: Union[str, PIL.Image.Image], model: str = 'nomic-embed-vision
 
     def run_inference(batch):
         response = requests.post(
-            atlas_class.atlas_api_path + "/v1/embedding/image",
+            f"{atlas_class.atlas_api_path}/v1/embedding/image",
             headers=atlas_class.header,
             data={"model": "nomic-embed-vision-v1"},
-            files=batch
+            files=batch,
         )
 
         if response.status_code == 200:
             return response.json()
-        else:
-            print(response.text)
-            raise Exception(response.status_code)
+        print(response.text)
+        raise Exception(response.status_code)
+
 
 
     #naive batching, we should parallelize this across threads like we do with uploads.
@@ -92,7 +92,9 @@ def images(images: Union[str, PIL.Image.Image], model: str = 'nomic-embed-vision
     final_response = {}
     final_response['embeddings'] = [embedding for response in responses for embedding in response['embeddings']]
     final_response['usage'] = {}
-    final_response['usage']['prompt_tokens'] = sum([response['usage']['prompt_tokens'] for response in responses])
+    final_response['usage']['prompt_tokens'] = sum(
+        response['usage']['prompt_tokens'] for response in responses
+    )
     final_response['usage']['total_tokens'] = final_response['usage']['prompt_tokens']
 
     return final_response

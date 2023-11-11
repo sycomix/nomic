@@ -34,21 +34,24 @@ def test_map_embeddings_with_errors():
 
     # test nested dictionaries
     with pytest.raises(Exception):
-        data = [{'key': {'nested_key': 'nested_value'}} for i in range(len(embeddings))]
+        data = [
+            {'key': {'nested_key': 'nested_value'}}
+            for _ in range(len(embeddings))
+        ]
         response = atlas.map_embeddings(
             embeddings=embeddings, data=data, name='UNITTEST1', is_public=True, reset_project_if_exists=True
         )
 
     # test underscore
     with pytest.raises(Exception):
-        data = [{'__hello': {'hello'}} for i in range(len(embeddings))]
+        data = [{'__hello': {'hello'}} for _ in range(len(embeddings))]
         response = atlas.map_embeddings(
             embeddings=embeddings, data=data, name='UNITTEST1', is_public=True, reset_project_if_exists=True
         )
 
     # test to long ids
     with pytest.raises(Exception):
-        data = [{'id': str(uuid.uuid4()) + 'a'} for i in range(len(embeddings))]
+        data = [{'id': f'{str(uuid.uuid4())}a'} for _ in range(len(embeddings))]
         response = atlas.map_embeddings(
             embeddings=embeddings,
             data=data,
@@ -105,7 +108,10 @@ def test_date_metadata():
 def test_map_embedding_progressive():
     num_embeddings = 100
     embeddings = np.random.rand(num_embeddings, 10)
-    data = [{'field': str(uuid.uuid4()), 'id': str(uuid.uuid4()), 'upload': 0.0} for i in range(len(embeddings))]
+    data = [
+        {'field': str(uuid.uuid4()), 'id': str(uuid.uuid4()), 'upload': 0.0}
+        for _ in range(len(embeddings))
+    ]
 
     project = atlas.map_embeddings(
         embeddings=embeddings,
@@ -118,7 +124,10 @@ def test_map_embedding_progressive():
     )
 
     embeddings = np.random.rand(num_embeddings, 10) + np.ones(shape=(num_embeddings, 10))
-    data = [{'field': str(uuid.uuid4()), 'id': str(uuid.uuid4()), 'upload': 1.0} for i in range(len(embeddings))]
+    data = [
+        {'field': str(uuid.uuid4()), 'id': str(uuid.uuid4()), 'upload': 1.0}
+        for _ in range(len(embeddings))
+    ]
 
     current_project = AtlasProject(name=project.name)
 
@@ -137,8 +146,12 @@ def test_map_embedding_progressive():
         # Try adding a bad field.
         with current_project.wait_for_project_lock():
             data = [
-                {'invalid_field': str(uuid.uuid4()), 'id': str(uuid.uuid4()), 'upload': 1.0}
-                for i in range(len(embeddings))
+                {
+                    'invalid_field': str(uuid.uuid4()),
+                    'id': str(uuid.uuid4()),
+                    'upload': 1.0,
+                }
+                for _ in range(len(embeddings))
             ]
 
             current_project = AtlasProject(name=project.name)
@@ -334,14 +347,17 @@ def test_weird_inputs():
     p.add_text(data=elements)
     p.create_index(name='test_weird_inputs', indexed_field='text', build_topic_model=True)
     with p.wait_for_project_lock():
-        assert True
+        pass
     p.delete()
 
 
 def test_map_embeddings():
     num_embeddings = 20
     embeddings = np.random.rand(num_embeddings, 10)
-    data = [{'field': str(uuid.uuid4()), 'id': str(uuid.uuid4())} for i in range(len(embeddings))]
+    data = [
+        {'field': str(uuid.uuid4()), 'id': str(uuid.uuid4())}
+        for _ in range(len(embeddings))
+    ]
 
     project = atlas.map_embeddings(
         embeddings=embeddings,
@@ -394,11 +410,15 @@ def test_map_embeddings():
 
 def test_map_text_pandas():
     size = 50
-    data = pd.DataFrame({
-        'field': [str(uuid.uuid4()) for i in range(size)],
-        'id': [str(uuid.uuid4()) for i in range(size)],
-        'color': [random.choice(['red', 'blue', 'green']) for i in range(size)],
-    })
+    data = pd.DataFrame(
+        {
+            'field': [str(uuid.uuid4()) for _ in range(size)],
+            'id': [str(uuid.uuid4()) for _ in range(size)],
+            'color': [
+                random.choice(['red', 'blue', 'green']) for _ in range(size)
+            ],
+        }
+    )
 
     project = atlas.map_text(
         name='UNITTEST_pandas_text',
@@ -419,11 +439,15 @@ def test_map_text_pandas():
     
 def test_map_text_arrow():
     size = 50
-    data = pa.Table.from_pydict({
-        'field': [str(uuid.uuid4()) for i in range(size)],
-        'id': [str(uuid.uuid4()) for i in range(size)],
-        'color': [random.choice(['red', 'blue', 'green']) for i in range(size)],
-    })
+    data = pa.Table.from_pydict(
+        {
+            'field': [str(uuid.uuid4()) for _ in range(size)],
+            'id': [str(uuid.uuid4()) for _ in range(size)],
+            'color': [
+                random.choice(['red', 'blue', 'green']) for _ in range(size)
+            ],
+        }
+    )
 
     project = atlas.map_text(
         name='UNITTEST_arrow_text',
